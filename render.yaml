@@ -1,0 +1,36 @@
+# ⚠️ IMPORTANT : Pas de section "databases" car on utilise la base NSIA distante
+
+services:
+  - type: web
+    name: nsia-pass-api
+    env: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn nsia_pass_api.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      # Configuration base NSIA distante
+      - key: DATABASE_URL
+        value: postgresql://api.pixel:@pI.^^pxel@2025@157.245.34.137:5432/WhatsAppDB
+      - key: DB_SSL_MODE
+        value: require
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: TIME_ZONE
+        value: "Africa/Brazzaville"
+      - key: LANGUAGE_CODE
+        value: "fr-fr"
+      # Configuration MTN Mobile Money Congo
+      - key: MTN_API_BASE_URL
+        value: "https://sandbox.momodeveloper.mtn.com"
+      - key: MTN_ENVIRONMENT
+        value: "sandbox"
+      - key: MTN_COLLECTION_USER_ID
+        value: "sandbox-user-id"
+      - key: MTN_COLLECTION_API_KEY
+        value: "sandbox-api-key"
+      - key: MTN_COLLECTION_SUBSCRIPTION_KEY
+        value: "sandbox-subscription-key"
