@@ -135,21 +135,33 @@ LANGUAGE_CODE = config('LANGUAGE_CODE', default='fr-fr')
 TIME_ZONE = config('TIME_ZONE', default='Africa/Brazzaville')
 USE_I18N = True
 USE_TZ = True
-
-# Static files
+# =============================================
+# FICHIERS STATIQUES (CONFIGURATION CRITIQUE)
+# =============================================
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Media files  
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Créer le dossier staticfiles s'il n'existe pas
+os.makedirs(STATIC_ROOT, exist_ok=True)
 
+# Configuration Whitenoise pour production
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Répertoires de fichiers statiques
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ] if DEBUG else []
 
-# Whitenoise configuration
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Configuration Whitenoise avancée
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
+WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+# =============================================
+# MEDIA FILES
+# =============================================
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Default primary key
