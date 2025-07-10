@@ -1,5 +1,4 @@
 import os
-import dj_database_url
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
@@ -86,20 +85,36 @@ WSGI_APPLICATION = 'nsia_pass_api.wsgi.application'
 # =============================================
 # BASE DE DONNÉES NSIA DISTANTE
 # =============================================
-if config('DATABASE_URL', default=None):
-    # Production Render avec base NSIA distante
-    DATABASES = {
-        'default': dj_database_url.parse(
-            config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
-    # SSL obligatoire pour base distante
-    DATABASES['default']['OPTIONS'] = {
-        'sslmode': 'require',
-        'connect_timeout': 30,
-    }
+def parse_database_url(url):
+    """Parse DATABASE_URL manuellement"""
+    if not url or not url.startswith('postgresql://'):
+        return None
+    
+    import re
+    match = re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', url)
+    
+    if match:
+        user, password, host, port, dbname = match.groups()
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': dbname,
+            'USER': user,
+            'PASSWORD': password,
+            'HOST': host,
+            'PORT': port,
+            'OPTIONS': {
+                'sslmode': 'require',
+                'connect_timeout': 30,
+            },
+        }
+    return None
+
+# Configuration base de données
+database_url = config('DATABASE_URL', default=None)
+parsed_db = parse_database_url(database_url)
+
+if parsed_db:
+    DATABASES = {'default': parsed_db}
 else:
     # Développement local
     DATABASES = {
