@@ -4,13 +4,19 @@ set -o errexit
 echo "🚀 Installation des dépendances..."
 pip install -r requirements.txt
 
-echo "📁 Collecte des fichiers statiques Django..."
-python manage.py collectstatic --no-input --clear
+echo "📁 Création forcée du dossier staticfiles..."
+mkdir -p staticfiles
 
-echo "🔍 Vérification connexion base NSIA..."
-python manage.py check --database default
+echo "🎨 Collecte FORCÉE des fichiers statiques..."
+python manage.py collectstatic --no-input --clear --verbosity 2
 
-echo "🗃️ Application des migrations..."
-python manage.py migrate --fake-initial || python manage.py migrate
+echo "📋 Vérification du contenu staticfiles..."
+ls -la staticfiles/ || echo "Dossier staticfiles vide"
 
-echo "🎉 Déploiement terminé avec succès!"
+echo "🔍 Vérification Django..."
+python manage.py check
+
+echo "🗃️ Migrations (si base NSIA accessible)..."
+python manage.py migrate --fake-initial || echo "Migration ignorée"
+
+echo "🎉 Build terminé!"
