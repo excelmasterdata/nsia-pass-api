@@ -6,23 +6,12 @@ from datetime import timedelta
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# =============================================
-# SÉCURITÉ PRODUCTION
-# =============================================
+# Security
 SECRET_KEY = config('SECRET_KEY', default='nsia-pass-django-secret-key-congo-2024')
-DEBUG = config('DEBUG', default=False, cast=bool)  # ← FALSE en production !
+DEBUG = config('DEBUG', default=True, cast=bool)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
 
-# ALLOWED_HOSTS pour Render + local
-ALLOWED_HOSTS = [
-    'localhost', 
-    '127.0.0.1', 
-    '.onrender.com',  # ← Pour tous les sous-domaines Render
-    'nsia-pass-api.onrender.com'  # ← Votre URL exacte
-]
-
-# =============================================
-# APPLICATIONS NSIA PASS
-# =============================================
+# Application definition - Spécialisé PASS
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -44,13 +33,10 @@ INSTALLED_APPS = [
     'apps.mtn_integration.apps.MtnIntegrationConfig',
 ]
 
-# =============================================
-# MIDDLEWARE (ORDRE CRITIQUE POUR WHITENOISE)
-# =============================================
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # ← POSITION CRITIQUE !
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # ← Doit être ici !
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -61,9 +47,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'nsia_pass_api.urls'
 
-# =============================================
-# TEMPLATES
-# =============================================
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -82,83 +65,33 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'nsia_pass_api.wsgi.application'
 
-# =============================================
-# BASE DE DONNÉES NSIA DISTANTE
-# =============================================
-def parse_database_url(url):
-    """Parse DATABASE_URL manuellement"""
-    if not url or not url.startswith('postgresql://'):
-        return None
-    
-    import re
-    match = re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', url)
-    
-    if match:
-        user, password, host, port, dbname = match.groups()
-        return {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': dbname,
-            'USER': user,
-            'PASSWORD': password,
-            'HOST': host,
-            'PORT': port,
-            'OPTIONS': {
-                'sslmode': 'require',
-                'connect_timeout': 30,
-            },
-        }
-    return None
-
-# Configuration base de données
-database_url = config('DATABASE_URL', default=None)
-parsed_db = parse_database_url(database_url)
-
-if parsed_db:
-    DATABASES = {'default': parsed_db}
-else:
-    # Développement local
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('DB_NAME', default='NSIAPassDB'),
-            'USER': config('DB_USER', default='nsia_pass_user'),
-            'PASSWORD': config('DB_PASSWORD', default='nsia_pass_password_123'),
-            'HOST': config('DB_HOST', default='localhost'),
-            'PORT': config('DB_PORT', default='5432'),
-        }
+# Database PostgreSQL pour PASS
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME', default='NSIAPassDB'),
+        'USER': config('DB_USER', default='nsia_pass_user'),
+        'PASSWORD': config('DB_PASSWORD', default='nsia_pass_password_123'),
+        'HOST': config('DB_HOST', default='localhost'),
+        'PORT': config('DB_PORT', default='5432'),
     }
+}
 
-# =============================================
-# FICHIERS STATIQUES (CONFIGURATION CRITIQUE)
-# =============================================
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=600, cast=int)
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
-# Créer le dossier staticfiles s'il n'existe pas
-os.makedirs(STATIC_ROOT, exist_ok=True)
+"""DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME', default='NSIAPassDB'),
+        'USER': config('DB_USER', default='nsia_pass_user'),
+        'PASSWORD': config('DB_PASSWORD', default='nsia_pass_password_123'),
+        'HOST': config('DB_HOST', default='localhost'),
+        'PORT': config('DB_PORT', default='5432'),
+    }
+}"""
 
-# Configuration Whitenoise pour production
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-# Répertoires de fichiers statiques
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-] if DEBUG else []
-
-# Configuration Whitenoise avancée
-WHITENOISE_USE_FINDERS = True
-WHITENOISE_AUTOREFRESH = DEBUG
-WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
-
-# =============================================
-# MEDIA FILES
-# =============================================
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
-# =============================================
-# VALIDATION MOTS DE PASSE
-# =============================================
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -166,9 +99,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# =============================================
-# REST FRAMEWORK NSIA PASS
-# =============================================
+# REST Framework pour API PASS
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -183,9 +114,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20
 }
 
-# =============================================
-# JWT POUR BORNE INTERACTIVE
-# =============================================
+# JWT Configuration pour borne PASS
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Session borne courte
     'REFRESH_TOKEN_LIFETIME': timedelta(hours=1),
@@ -193,84 +122,52 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-# =============================================
-# CORS POUR BORNE REACT NATIVE
-# =============================================
+# CORS pour frontend borne
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8081",  # React Native Metro
-    "https://nsia-pass-api.onrender.com",  # Votre API
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# =============================================
-# INTERNATIONALISATION CONGO
-# =============================================
-LANGUAGE_CODE = 'fr-fr'
-TIME_ZONE = 'Africa/Brazzaville'
+# Internationalization Congo
+LANGUAGE_CODE = config('LANGUAGE_CODE', default='fr-fr')
+TIME_ZONE = config('TIME_ZONE', default='Africa/Brazzaville')
 USE_I18N = True
 USE_TZ = True
 
-# =============================================
-# MTN MOBILE MONEY CONGO
-# =============================================
+# Static files
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Media files  
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+] if DEBUG else []
+
+# Whitenoise configuration
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+
+# Default primary key
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ===============================================
+# Configuration MTN Mobile Money Congo
+# ===============================================
 MTN_MOBILE_MONEY = {
     'BASE_URL': config('MTN_API_BASE_URL', default='https://sandbox.momodeveloper.mtn.com'),
     'COLLECTION_USER_ID': config('MTN_COLLECTION_USER_ID', default=''),
     'COLLECTION_API_KEY': config('MTN_COLLECTION_API_KEY', default=''),
     'COLLECTION_SUBSCRIPTION_KEY': config('MTN_COLLECTION_SUBSCRIPTION_KEY', default=''),
-    'ENVIRONMENT': config('MTN_ENVIRONMENT', default='sandbox'),
-    'CURRENCY': 'XAF',  # Franc CFA Congo
-    'COUNTRY': 'CG',    # Congo-Brazzaville
+    'ENVIRONMENT': config('MTN_ENVIRONMENT', default='sandbox'),  # sandbox ou production
+    'CURRENCY': 'XAF',  # Franc CFA
+    'COUNTRY': 'CG',    # Congo
 }
 
-# =============================================
-# SÉCURITÉ PRODUCTION
-# =============================================
-if not DEBUG:
-    # HTTPS obligatoire en production
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
-# =============================================
-# CONFIGURATION FINALE
-# =============================================
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Force collectstatic en production si nécessaire
-if not DEBUG and not os.listdir(STATIC_ROOT):
-    import subprocess
-    try:
-        subprocess.run(['python', 'manage.py', 'collectstatic', '--no-input'], check=True)
-    except:
-        pass
-
-# =============================================
-# LOGGING POUR DEBUG
-# =============================================
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-        },
-        'whitenoise': {
-            'handlers': ['console'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
-        },
-    },
-}
+# Redis pour Celery (tâches async)
+CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
