@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+from celery.schedules import crontab
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     'apps.pass_payments.apps.PassPaymentsConfig',
     'apps.borne_auth.apps.BorneAuthConfig',
     'apps.mtn_integration.apps.MtnIntegrationConfig',
+    'apps.airtel_integration.apps.AirtelIntegrationConfig',
 ]
 
 MIDDLEWARE = [
@@ -178,8 +180,51 @@ MTN_MOBILE_MONEY = {
     'ENVIRONMENT': config('MTN_ENVIRONMENT', default='sandbox'),  # sandbox ou production
     'CURRENCY': 'XAF',  # Franc CFA
     'COUNTRY': 'CG',    # Congo
+    'TIMEOUT': 60,
+    'BASIC_AUTH_TOKEN': config('MTN_BASIC_AUTH_TOKEN', default=''),
 }
 
-# Redis pour Celery (tâches async)
-CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
+# Airtel Money PRODUCTION
+AIRTEL_MONEY = {
+    'BASE_URL': 'https://openapi.airtel.africa',
+    'CLIENT_ID': config('AIRTEL_CLIENT_ID'),
+    'CLIENT_SECRET': config('AIRTEL_CLIENT_SECRET'),
+    'COUNTRY': 'CG',
+    'CURRENCY': 'XAF',
+    'TIMEOUT': 60,
+}
+
+# Broker et Backend Redis
+CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+
+# Sérialisation
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+# Timezone
+CELERY_TIMEZONE = 'Africa/Brazzaville'
+
+# Configuration des tâches périodiques
+CELERY_BEAT_SCHEDULE = {
+    'monitor-pending-payments': {
+        'task': 'apps.pass_payments.tasks.monitor_pending_payments',
+        'schedule': 30.0,  # Toutes les 30 secondes
+        # Enlever la ligne 'options': {'queue': 'payment_monitoring'}
+    },
+}
+
+# Et COMMENTER ces lignes pour simplifier :
+# CELERY_TASK_ROUTES = {
+#     'apps.pass_payments.tasks.*': {'queue': 'payment_monitoring'},
+#     'apps.mtn_integration.tasks.*': {'queue': 'mtn_operations'},
+#     'apps.airtel_integration.tasks.*': {'queue': 'airtel_operations'},
+# }
+
+
+# Autres configurations Celery
+CELERY_TASK_ALWAYS_EAGER = False  # True pour les tests
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True

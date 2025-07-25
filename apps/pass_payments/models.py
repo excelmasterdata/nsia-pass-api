@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.validators import RegexValidator
+import uuid
+from datetime import datetime
 
 class PaiementPass(models.Model):
     """Historique des paiements PASS via Mobile Money"""
@@ -63,7 +65,7 @@ class PaiementPass(models.Model):
             message='Format téléphone Congo: +242XXXXXXXX'
         )]
     )
-    code_confirmation = models.CharField(max_length=20, blank=True)
+    code_confirmation = models.CharField(max_length=100, blank=True)
     
     # Statut paiement
     statut = models.CharField(max_length=30, choices=STATUT_CHOICES, default='en_cours')
@@ -92,6 +94,14 @@ class PaiementPass(models.Model):
         return f"{self.numero_transaction} - {self.montant} XAF ({self.operateur})"
     
     def save(self, *args, **kwargs):
+        # Auto-génération du numéro de transaction
+        if not self.numero_transaction:
+            from datetime import datetime
+            import uuid
+            date_str = datetime.now().strftime('%Y%m%d')
+            unique_id = uuid.uuid4().hex[:8].upper()
+            self.numero_transaction = f"PAY-{date_str}-{unique_id}"
+        
         # Calcul automatique du montant net
         self.montant_net = self.montant - self.frais_transaction
         super().save(*args, **kwargs)

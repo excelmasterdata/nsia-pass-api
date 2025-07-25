@@ -3,6 +3,9 @@ from django.utils import timezone
 from apps.pass_payments.models import PaiementPass
 from apps.pass_clients.services import SouscriptionPassService
 import uuid
+from apps.mtn_integration.services import MTNMobileMoneyService
+from apps.airtel_integration.services import AirtelMoneyService
+
 
 class PaiementPassService:
     """Service pour gérer les paiements PASS"""
@@ -62,3 +65,44 @@ class PaiementPassService:
             'paiement': paiement,
             'souscription': souscription_activee
         }
+
+
+class PaymentServiceFactory:
+    """Factory pour choisir le service de paiement approprié"""
+    
+    @staticmethod
+    def get_service(operateur):
+        """Retourne le service de paiement selon l'opérateur choisi"""
+        services = {
+            'mtn_money': MTNMobileMoneyService,
+            'airtel_money': AirtelMoneyService,
+        }
+        
+        if operateur not in services:
+            raise ValueError(f"Opérateur non supporté: {operateur}")
+            
+        return services[operateur]()
+    
+    @staticmethod
+    def get_supported_operators():
+        """Liste des opérateurs supportés"""
+        return ['mtn_money', 'airtel_money']
+    
+    @staticmethod
+    def detect_operator_from_phone(phone_number):
+        """Détection automatique basée sur le préfixe (optionnel)"""
+        clean_phone = phone_number.replace('+', '').replace(' ', '')
+        
+        # Préfixes Congo
+        mtn_prefixes = ['242061', '242062', '242063', '242064', '242065']
+        airtel_prefixes = ['242055', '242056', '242057', '242058', '242059']
+        
+        for prefix in mtn_prefixes:
+            if clean_phone.startswith(prefix):
+                return 'mtn_money'
+                
+        for prefix in airtel_prefixes:
+            if clean_phone.startswith(prefix):
+                return 'airtel_money'
+                
+        return None  # Opérateur non détecté

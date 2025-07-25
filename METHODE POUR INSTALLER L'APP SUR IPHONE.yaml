@@ -1,0 +1,19 @@
+Méthode 2 : Sur votre iPhone physique (recommandé)
+bash# 1. Connecter votre iPhone au Mac via câble
+# 2. Sur l'iPhone : Réglages > Confidentialité > Mode développeur (l'activer)
+# 3. Faire confiance à votre Mac si demandé
+
+# 4. Lancer l'installation
+npm run ios --device
+
+# Ou spécifier votre iPhone
+npx react-native run-ios --device "iPhone de Noededieu"
+🔧 Configuration pour iPhone physique
+Si c'est la première fois, vous devez configurer :
+bash# 1. Ouvrir le projet iOS dans Xcode
+open ios/NSIABorne.xcworkspace
+
+# 2. Dans Xcode :
+# - Sélectionner votre iPhone dans la liste des devices
+# - Signing & Capabilities > Team > Votre Apple ID
+# - Build and Run (⌘+R)

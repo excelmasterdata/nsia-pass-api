@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.utils import timezone
+from apps.borne_auth.models import NumeroPolice
 from apps.pass_clients.models import ClientPass, SouscriptionPass
 from apps.pass_products.models import ProduitPass, BeneficiairePass
 from apps.pass_payments.models import PaiementPass
@@ -114,20 +115,43 @@ class SouscriptionPassService:
         if souscription.statut != 'en_cours':
             raise ValueError("Seules les souscriptions 'en_cours' peuvent être activées")
         
-        # Activer la souscription
+        # Vérifier si la police n'existe pas déjà (éviter les doublons)
+        police_existante = NumeroPolice.objects.filter(
+            souscription_pass=souscription
+        ).first()
+        
+        if police_existante:
+            print(f"⚠️ Police déjà générée pour souscription {souscription_id}: {police_existante.numero_police}")
+            return souscription
+        
+        # 1. Activer la souscription
         souscription.statut = 'activee'
         souscription.date_activation = timezone.now()
         
-        # Calculer la date d'expiration
+        # 2. Calculer la date d'expiration
         duree = souscription.produit_pass.duree_validite_jours
         souscription.date_expiration = (
             souscription.date_activation + timezone.timedelta(days=duree)
         ).date()
         
+        # 3. Marquer le paiement initial comme reçu
         souscription.paiement_initial_recu = True
         souscription.save()
         
-        # Mettre à jour les statistiques client
+        # 4. NOUVEAU : Générer le numéro de police
+        numero_police = SouscriptionPassService.generer_numero_police(souscription)
+        
+        # 5. Créer l'enregistrement NumeroPolice
+        police = NumeroPolice.objects.create(
+            souscription_pass=souscription,
+            numero_police=numero_police,
+            date_attribution=timezone.now(),
+            statut='attribue'
+        )
+        
+        print(f"✅ Police générée: {numero_police} pour souscription {souscription_id}")
+        
+        # 6. Mettre à jour les statistiques client
         client = souscription.client
         client.nombre_souscriptions_actives = client.souscriptions.filter(
             statut='activee'
@@ -139,4 +163,65 @@ class SouscriptionPassService:
         )
         client.save()
         
-        return souscription
+        return {
+            'souscription': souscription,
+            'numero_police': numero_police,
+            'police': police
+        }
+    
+    @staticmethod
+    def generer_numero_police(souscription):
+        """Génère un numéro de police unique au format CG-YYYY-PPP-NNN"""
+        
+        # Composants du numéro
+        pays = "CG"  # Congo
+        annee = timezone.now().year
+        
+        # Code produit (3 premières lettres du code_pass en majuscules)
+        code_produit = souscription.produit_pass.code_pass[:3].upper()
+        
+        # Trouver le prochain numéro de séquence pour cette année et ce produit
+        prefixe = f"{pays}-{annee}-{code_produit}-"
+        
+        # Chercher le dernier numéro généré avec ce préfixe
+        dernier_numero = NumeroPolice.objects.filter(
+            numero_police__startswith=prefixe
+        ).order_by('-numero_police').first()
+        
+        if dernier_numero:
+            # Extraire la séquence et incrémenter
+            try:
+                sequence_str = dernier_numero.numero_police.split('-')[-1]
+                sequence = int(sequence_str) + 1
+            except (ValueError, IndexError):
+                # En cas d'erreur, commencer à 1
+                sequence = 1
+        else:
+            # Premier numéro pour cette combinaison année/produit
+            sequence = 1
+        
+        # Formater le numéro final
+        numero_police = f"{prefixe}{sequence:03d}"
+        
+        print(f"🔢 Numéro de police généré: {numero_police}")
+        
+        return numero_police
+    
+    @staticmethod
+    def verifier_police_unique(numero_police):
+        """Vérifie qu'un numéro de police est unique"""
+        return not NumeroPolice.objects.filter(
+            numero_police=numero_police
+        ).exists()
+    
+    @staticmethod
+    def get_police_by_souscription(souscription_id):
+        """Récupère la police d'une souscription"""
+        try:
+            police = NumeroPolice.objects.get(
+                souscription_pass_id=souscription_id,
+                statut='attribue'
+            )
+            return police.numero_police
+        except NumeroPolice.DoesNotExist:
+            return None
