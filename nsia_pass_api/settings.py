@@ -187,8 +187,8 @@ MTN_MOBILE_MONEY = {
 # Airtel Money PRODUCTION
 AIRTEL_MONEY = {
     'BASE_URL': 'https://openapi.airtel.africa',
-    'CLIENT_ID': config('AIRTEL_CLIENT_ID'),
-    'CLIENT_SECRET': config('AIRTEL_CLIENT_SECRET'),
+    'CLIENT_ID': config('AIRTEL_CLIENT_ID', default=''),
+    'CLIENT_SECRET': config('AIRTEL_CLIENT_SECRET', default=''),
     'COUNTRY': 'CG',
     'CURRENCY': 'XAF',
     'TIMEOUT': 60,
