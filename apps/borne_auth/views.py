@@ -102,7 +102,7 @@ def client_dashboard(request, police):
         numero_police = NumeroPolice.objects.select_related(
             'souscription_pass__client',
             'souscription_pass__produit_pass'
-        ).get(numero_police=police, statut='actif')
+        ).get(numero_police=police, statut='attribue')
         
         client = numero_police.souscription_pass.client
         
@@ -122,7 +122,7 @@ def client_dashboard(request, police):
         contrats = []
         polices_client = NumeroPolice.objects.filter(
             souscription_pass__client=client,
-            statut='actif'
+            statut="attribue"
         ).select_related('souscription_pass__produit_pass')
         
         for p in polices_client:
