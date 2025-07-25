@@ -7,10 +7,10 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Sum, Count
+from apps.borne_auth.models import NumeroPolice
+from apps.borne_auth.serializers import BorneAuthenticationSerializer
 from apps.pass_clients.models import ClientPass, SouscriptionPass
 from apps.pass_payments.models import PaiementPass
-from apps.borne_auth.serializers import BorneAuthenticationSerializer
-from apps.borne_auth.models import NumeroPolice
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -88,11 +88,10 @@ def borne_authenticate(request):
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 @api_view(['GET'])
 def client_dashboard(request, police):
     """
-    Dashboard client PASS avec soldes basés sur les paiements réussis
+    Dashboard client PASS avec vue d'ensemble
     
     GET /api/v1/clients/{police}/dashboard/
     Headers: Authorization: Bearer <token>
@@ -109,54 +108,33 @@ def client_dashboard(request, police):
         # Statistiques client
         souscriptions = SouscriptionPass.objects.filter(client=client)
         souscriptions_actives = souscriptions.filter(
-            statut__in=['activee']
+            statut__in=['activee', 'en_cours']
         ).count()
         
-        # ✅ CORRECTION: Solde global = TOUS les paiements réussis du client
-        solde_global = PaiementPass.objects.filter(
-            client=client,
-            statut='succes'
-        ).aggregate(total=Sum('montant'))['total'] or 0
+        # Valeur totale des souscriptions
+        valeur_totale = souscriptions.aggregate(
+            total=Sum('montant_souscription')
+        )['total'] or 0
         
         # Contrats (vues) basés sur souscriptions avec police
         contrats = []
         polices_client = NumeroPolice.objects.filter(
-            souscription_pass__client=client,
-            statut="attribue"
+            souscription_pass__client=client
         ).select_related('souscription_pass__produit_pass')
         
         for p in polices_client:
-            # ✅ CORRECTION: Solde par contrat = Paiements réussis de cette souscription
-            solde_contrat = PaiementPass.objects.filter(
-                souscription_pass=p.souscription_pass,
-                statut='succes'
-            ).aggregate(total=Sum('montant'))['total'] or 0
-            
-            # Détail des paiements pour ce contrat
-            paiements_contrat = PaiementPass.objects.filter(
-                souscription_pass=p.souscription_pass,
-                statut='succes'
-            ).count()
-            
             contrats.append({
                 'police': p.numero_police,
                 'produit': p.souscription_pass.produit_pass.nom_pass,
-                'montant': solde_contrat,  # ✅ Somme des paiements réussis
-                'montant_souscription': p.souscription_pass.montant_souscription,  # Montant initial
+                'montant': p.souscription_pass.montant_souscription,
                 'statut': p.souscription_pass.statut,
                 'date_souscription': p.souscription_pass.date_souscription,
-                'periodicite': p.souscription_pass.periodicite,
-                'nombre_paiements': paiements_contrat,  # ✅ Nouveau: nombre de paiements
-                'dernier_paiement': PaiementPass.objects.filter(
-                    souscription_pass=p.souscription_pass,
-                    statut='succes'
-                ).order_by('-date_paiement').first()
+                'periodicite': p.souscription_pass.periodicite
             })
         
-        # Derniers paiements (réussis uniquement)
+        # Derniers paiements
         derniers_paiements = PaiementPass.objects.filter(
-            client=client,
-            statut='succes'  # ✅ Uniquement les paiements réussis
+            client=client
         ).order_by('-date_paiement')[:5]
         
         paiements_data = []
@@ -167,27 +145,8 @@ def client_dashboard(request, police):
                 'operateur': paiement.operateur,
                 'statut': paiement.statut,
                 'date_paiement': paiement.date_paiement,
-                'type_paiement': paiement.type_paiement,
-                'police': paiement.souscription_pass.numero_police.first().numero_police if paiement.souscription_pass.numero_police.exists() else None
+                'type_paiement': paiement.type_paiement
             })
-        
-        # ✅ Statistiques enrichies
-        total_paiements_reussis = PaiementPass.objects.filter(
-            client=client,
-            statut='succes'
-        ).count()
-        
-        montant_souscriptions_initiales = PaiementPass.objects.filter(
-            client=client,
-            statut='succes',
-            type_paiement='souscription_initiale'
-        ).aggregate(total=Sum('montant'))['total'] or 0
-        
-        montant_cotisations = PaiementPass.objects.filter(
-            client=client,
-            statut='succes',
-            type_paiement__in=['cotisation', 'renouvellement']
-        ).aggregate(total=Sum('montant'))['total'] or 0
         
         # Dashboard complet
         dashboard_data = {
@@ -200,12 +159,8 @@ def client_dashboard(request, police):
             'statistiques': {
                 'souscriptions_actives': souscriptions_actives,
                 'total_souscriptions': souscriptions.count(),
-                'valeur_totale': solde_global,  # ✅ Somme des paiements réussis
-                'nombre_polices': polices_client.count(),
-                # ✅ Nouvelles statistiques
-                'total_paiements_reussis': total_paiements_reussis,
-                'montant_souscriptions': montant_souscriptions_initiales,
-                'montant_cotisations': montant_cotisations
+                'valeur_totale': valeur_totale,
+                'nombre_polices': polices_client.count()
             },
             'contrats': contrats,
             'derniers_paiements': paiements_data
