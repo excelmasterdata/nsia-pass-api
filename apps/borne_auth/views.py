@@ -120,14 +120,21 @@ def client_dashboard(request, police):
         # Contrats (vues) basés sur souscriptions avec police
         contrats = []
         polices_client = NumeroPolice.objects.filter(
-            souscription_pass__client=client
+            souscription_pass__client=client,
+            statut='attribue'
         ).select_related('souscription_pass__produit_pass')
+
         
         for p in polices_client:
+            solde_contrat = PaiementPass.objects.filter(
+                souscription_pass=p.souscription_pass,
+                statut='succes'
+            ).aggregate(total=Sum('montant'))['total'] or 0
+
             contrats.append({
                 'police': p.numero_police,
                 'produit': p.souscription_pass.produit_pass.nom_pass,
-                'montant': p.souscription_pass.montant_souscription,
+                'montant': solde_contrat,
                 'statut': p.souscription_pass.statut,
                 'date_souscription': p.souscription_pass.date_souscription,
                 'periodicite': p.souscription_pass.periodicite
