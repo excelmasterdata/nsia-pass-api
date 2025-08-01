@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
+from apps.borne_auth.models import Agent
 
 class ClientPass(models.Model):
     """Clients souscripteurs PASS Congo"""
@@ -81,6 +82,15 @@ class SouscriptionPass(models.Model):
     # Relations
     client = models.ForeignKey('pass_clients.ClientPass', on_delete=models.RESTRICT, related_name='souscriptions')
     produit_pass = models.ForeignKey('pass_products.ProduitPass', on_delete=models.RESTRICT)
+
+    # ✅ NOUVEAU : Liaison avec l'agent
+    agent = models.ForeignKey(
+        Agent, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        related_name='souscriptions',
+        help_text="Agent commercial qui a créé cette souscription"
+    )
     
     # Identification
     numero_souscription = models.CharField(max_length=30, unique=True)
@@ -112,9 +122,20 @@ class SouscriptionPass(models.Model):
         ordering = ['-date_souscription']
         verbose_name = 'Souscription PASS'
         verbose_name_plural = 'Souscriptions PASS'
-        
+        indexes = [
+            models.Index(fields=['numero_souscription']),
+            models.Index(fields=['statut']),
+            models.Index(fields=['agent']),  #  Index pour les requêtes par agent
+        ]
+
     def __str__(self):
-        return f"{self.numero_souscription} - {self.client.nom_complet}"
+        agent_info = f" (Agent: {self.agent.matricule})" if self.agent else ""
+        return f"{self.numero_souscription} - {self.client.nom_complet}{agent_info}"
+    
+    @property
+    def nom_agent(self):
+        """Nom complet de l'agent (pour les templates/API)"""
+        return self.agent.nom_complet if self.agent else "Non assigné"
     
     def save(self, *args, **kwargs):
         # Auto-génération du numéro de souscription

@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.utils import timezone
-from apps.borne_auth.models import NumeroPolice
+from apps.borne_auth.models import Agent, NumeroPolice
 from apps.pass_clients.models import ClientPass, SouscriptionPass
 from apps.pass_products.models import ProduitPass, BeneficiairePass
 from apps.pass_payments.models import PaiementPass
@@ -66,6 +66,13 @@ class SouscriptionPassService:
         if produit.prix_maximum and montant > produit.prix_maximum:
             raise ValueError(f"Montant maximum: {produit.prix_maximum} FCFA")
         
+        agent = None
+        if donnees_souscription.get('agent_id'):
+            try:
+                agent = Agent.objects.get(id=donnees_souscription['agent_id'], statut='actif')
+            except Agent.DoesNotExist:
+                pass  # Continuer sans agent si erreur
+        
         # 4. Créer la souscription
         souscription = SouscriptionPass.objects.create(
             client=client,
@@ -75,7 +82,8 @@ class SouscriptionPassService:
             statut='en_cours',
             validation_automatique=True,
             operateur_paiement=donnees_souscription.get('operateur_mobile', 'mtn'),
-            commentaires=donnees_souscription.get('commentaires', '')
+            commentaires=donnees_souscription.get('commentaires', ''),
+            agent=agent
         )
         
         # 5. Ajouter les bénéficiaires si fournis
@@ -91,7 +99,8 @@ class SouscriptionPassService:
                 relation_souscripteur=beneficiaire_data['relation'],
                 date_naissance=beneficiaire_data.get('date_naissance'),
                 ordre_priorite=i + 1,
-                statut='actif'
+                statut='actif',
+                
             )
             beneficiaires_crees.append(beneficiaire)
         
@@ -99,7 +108,8 @@ class SouscriptionPassService:
             'souscription': souscription,
             'client': client,
             'client_created': client_created,
-            'beneficiaires': beneficiaires_crees
+            'beneficiaires': beneficiaires_crees,
+            'agent': agent  # ✅ Retourner l'agent aussi
         }
 
     @staticmethod
@@ -127,6 +137,12 @@ class SouscriptionPassService:
         # 1. Activer la souscription
         souscription.statut = 'activee'
         souscription.date_activation = timezone.now()
+
+        # Quand souscription activée
+        #if souscription.statut == 'activee' and souscription.agent:
+        #commission = souscription.montant_souscription * souscription.agent.taux_commission / 100
+        #souscription.agent.solde_commissions += commission
+        #souscription.agent.save()
         
         # 2. Calculer la date d'expiration
         duree = souscription.produit_pass.duree_validite_jours

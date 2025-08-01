@@ -41,3 +41,4 @@ celery==5.5.3
 redis==6.2.0
 kombu==5.5.4
 sentry-sdk==1.38.0
+django-filter==25.1

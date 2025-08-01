@@ -25,6 +25,11 @@ import logging
 from django.http import JsonResponse
 from datetime import datetime
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import UntypedToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from apps.borne_auth.models import Agent
+
 # Logger
 logger = logging.getLogger(__name__)
 
@@ -349,12 +354,13 @@ def verifier_statut_paiement_borne(request, numero_transaction):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def nouvelle_souscription_avec_paiement(request):
     """
-    Crée une nouvelle souscription PASS avec paiement flexible
+    Crée une nouvelle souscription PASS avec paiement flexible + agent connecté
     
     POST /api/v1/paiements/nouvelle-souscription/
+    Headers: Authorization: Bearer <agent_token>
     {
         "produit_pass_id": 1,
         "operateur": "mtn_money",
@@ -370,7 +376,32 @@ def nouvelle_souscription_avec_paiement(request):
     """
     try:
         with transaction.atomic():
-            # 1. Extraire et valider les données
+            # ✅ 1. RÉCUPÉRER L'AGENT CONNECTÉ DEPUIS LE TOKEN JWT
+            agent_connecte = None
+            
+            try:
+                # Récupérer le token depuis l'en-tête Authorization
+                auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+                if auth_header.startswith('Bearer '):
+                    token = auth_header.replace('Bearer ', '')
+                    
+                    # Décoder le token pour récupérer les métadonnées
+                    from rest_framework_simplejwt.tokens import UntypedToken
+                    from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+                    validated_token = UntypedToken(token)
+                    
+                    # Vérifier si c'est un token agent
+                    if validated_token.get('user_type') == 'agent':
+                        agent_id = validated_token.get('agent_id')
+                        if agent_id:
+                            from apps.borne_auth.models import Agent
+                            agent_connecte = Agent.objects.get(id=agent_id, statut='actif')
+                    
+            except (InvalidToken, TokenError, Agent.DoesNotExist):
+                # Si pas d'agent connecté, continuer sans (pour compatibilité)
+                pass
+            
+            # 2. Extraire et valider les données
             produit_pass_id = request.data.get('produit_pass_id')
             operateur = request.data.get('operateur', 'mtn_money')
             client_data = request.data.get('client', {})
@@ -391,10 +422,10 @@ def nouvelle_souscription_avec_paiement(request):
                     'error': f'Opérateur {operateur} non supporté'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # 2. Récupérer le produit PASS
+            # 3. Récupérer le produit PASS
             produit_pass = get_object_or_404(ProduitPass, id=produit_pass_id)
             
-            # 3. Auto-détection d'opérateur si nécessaire
+            # 4. Auto-détection d'opérateur si nécessaire
             telephone = client_data['telephone']
             if not operateur or operateur == 'auto':
                 operateur_detecte = PaymentServiceFactory.detect_operator_from_phone(telephone)
@@ -403,7 +434,7 @@ def nouvelle_souscription_avec_paiement(request):
                 else:
                     operateur = 'mtn_money'  # Défaut
             
-            # 4. ✅ UTILISER LE SERVICE pour créer la souscription
+            # 5. ✅ UTILISER LE SERVICE pour créer la souscription avec agent
             donnees_souscription = {
                 'code_pass': produit_pass.code_pass,
                 'montant_souscription': montant,
@@ -416,7 +447,11 @@ def nouvelle_souscription_avec_paiement(request):
                 },
                 'beneficiaires': beneficiaires_data,
                 'periodicite': request.data.get('periodicite', 'mensuelle'),
-                'commentaires': f'Souscription via {operateur}'
+                'commentaires': f'Souscription via {operateur}' + (
+                    f' - Agent: {agent_connecte.nom_complet}' if agent_connecte else ''
+                ),
+                # ✅ NOUVEAU : Ajouter l'agent dans les données
+                'agent_id': agent_connecte.id if agent_connecte else None
             }
             
             # Créer la souscription via le service
@@ -427,7 +462,7 @@ def nouvelle_souscription_avec_paiement(request):
             souscription = resultat_souscription['souscription']
             client = resultat_souscription['client']
             
-            # 5. Créer le paiement initial
+            # 6. Créer le paiement initial
             paiement = PaiementPass.objects.create(
                 souscription_pass=souscription,
                 client=client,
@@ -440,7 +475,7 @@ def nouvelle_souscription_avec_paiement(request):
             
             paiement.refresh_from_db()
             
-            # 6. Initier le paiement selon l'opérateur
+            # 7. Initier le paiement selon l'opérateur
             payment_service = PaymentServiceFactory.get_service(operateur)
             
             if operateur == 'mtn_money':
@@ -478,6 +513,13 @@ def nouvelle_souscription_avec_paiement(request):
                             'produit': produit_pass.nom_pass,
                             'client_cree': resultat_souscription['client_created'],
                             'beneficiaires_count': len(resultat_souscription['beneficiaires']),
+                            # ✅ NOUVEAU : Infos agent
+                            'agent': {
+                                'id': agent_connecte.id,
+                                'nom_complet': agent_connecte.nom_complet,
+                                'matricule': agent_connecte.matricule,
+                                'agence': agent_connecte.agence
+                            } if agent_connecte else None,
                             'instructions': 'Vérifiez votre téléphone MTN Mobile Money et confirmez le paiement'
                         }
                     })
@@ -537,6 +579,13 @@ def nouvelle_souscription_avec_paiement(request):
                             'produit': produit_pass.nom_pass,
                             'client_cree': resultat_souscription['client_created'],
                             'beneficiaires_count': len(resultat_souscription['beneficiaires']),
+                            # ✅ NOUVEAU : Infos agent
+                            'agent': {
+                                'id': agent_connecte.id,
+                                'nom_complet': agent_connecte.nom_complet,
+                                'matricule': agent_connecte.matricule,
+                                'agence': agent_connecte.agence
+                            } if agent_connecte else None,
                             'instructions': 'Vérifiez votre téléphone Airtel Money et confirmez le paiement'
                         }
                     })
@@ -563,7 +612,6 @@ def nouvelle_souscription_avec_paiement(request):
             'error': 'Erreur lors de la création de la souscription',
             'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
