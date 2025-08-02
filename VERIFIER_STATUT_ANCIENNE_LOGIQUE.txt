@@ -1,0 +1,77 @@
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def verifier_statut_paiement_borne(request, numero_transaction):
+    """
+    Vérifie le statut d'un paiement depuis la borne (compatible tous opérateurs)
+    
+    GET /api/v1/paiements/statut/{numero_transaction}/
+    """
+    try:
+        paiement = get_object_or_404(PaiementPass, numero_transaction=numero_transaction)
+        
+        # Logique selon l'opérateur
+        if paiement.operateur == 'mtn_money':
+            transaction_mtn = get_object_or_404(TransactionMTN, external_id=numero_transaction)
+            
+            # Vérifier le statut auprès de MTN
+            mtn_service = MTNMobileMoneyService()
+            result = mtn_service.check_payment_status(transaction_mtn.financial_transaction_id)
+            
+            if result['success']:
+                mtn_status = result['status']
+                
+                # Mapper le statut MTN
+                if mtn_status == 'SUCCESSFUL':
+                    paiement.statut = 'succes'
+                    paiement.code_confirmation = result.get('financial_transaction_id', '')
+                    paiement.date_confirmation = datetime.now()
+                    message = 'Paiement MTN effectué avec succès'
+                        
+                elif mtn_status == 'FAILED':
+                    paiement.statut = 'echec'
+                    paiement.motif_echec = result.get('reason', 'Paiement MTN rejeté')
+                    message = 'Paiement MTN échoué'
+                    
+                else:  # PENDING
+                    paiement.statut = 'en_cours'
+                    message = 'Paiement MTN en cours de traitement'
+                
+                paiement.save()
+                
+                return Response({
+                    'success': True,
+                    'data': {
+                        'numero_transaction': numero_transaction,
+                        'statut': paiement.statut,
+                        'operateur': paiement.operateur,
+                        'montant': paiement.montant,
+                        'date_paiement': paiement.date_paiement,
+                        'statut_operateur': mtn_status,
+                        'message': message
+                    }
+                })
+        
+        elif paiement.operateur == 'airtel_money':
+            # TODO: Ajouter la vérification Airtel quand prêt
+            return Response({
+                'success': True,
+                'data': {
+                    'numero_transaction': numero_transaction,
+                    'statut': paiement.statut,
+                    'operateur': paiement.operateur,
+                    'montant': paiement.montant,
+                    'message': 'Vérification Airtel bientôt disponible'
+                }
+            })
+        
+        return Response({
+            'success': False,
+            'error': 'Opérateur non reconnu'
+        }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': 'Erreur technique',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

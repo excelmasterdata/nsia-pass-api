@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 
 from apps.airtel_integration.models import TransactionAirtel
+from apps.airtel_integration.services import AirtelMoneyService
 from apps.pass_clients.services import SouscriptionPassService
 from apps.pass_payments.services import PaymentServiceFactory
 from .models import PaiementPass
@@ -276,7 +277,7 @@ def initier_paiement_borne(request):
     return initier_paiement_flexible(request)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def verifier_statut_paiement_borne(request, numero_transaction):
     """
     Vérifie le statut d'un paiement depuis la borne (compatible tous opérateurs)
@@ -294,51 +295,18 @@ def verifier_statut_paiement_borne(request, numero_transaction):
             mtn_service = MTNMobileMoneyService()
             result = mtn_service.check_payment_status(transaction_mtn.financial_transaction_id)
             
-            if result['success']:
-                mtn_status = result['status']
-                
-                # Mapper le statut MTN
-                if mtn_status == 'SUCCESSFUL':
-                    paiement.statut = 'succes'
-                    paiement.code_confirmation = result.get('financial_transaction_id', '')
-                    paiement.date_confirmation = datetime.now()
-                    message = 'Paiement MTN effectué avec succès'
-                        
-                elif mtn_status == 'FAILED':
-                    paiement.statut = 'echec'
-                    paiement.motif_echec = result.get('reason', 'Paiement MTN rejeté')
-                    message = 'Paiement MTN échoué'
-                    
-                else:  # PENDING
-                    paiement.statut = 'en_cours'
-                    message = 'Paiement MTN en cours de traitement'
-                
-                paiement.save()
-                
-                return Response({
-                    'success': True,
-                    'data': {
-                        'numero_transaction': numero_transaction,
-                        'statut': paiement.statut,
-                        'operateur': paiement.operateur,
-                        'montant': paiement.montant,
-                        'date_paiement': paiement.date_paiement,
-                        'statut_operateur': mtn_status,
-                        'message': message
-                    }
-                })
+            return Response({
+                'data': result
+            })
         
         elif paiement.operateur == 'airtel_money':
-            # TODO: Ajouter la vérification Airtel quand prêt
+            transaction_airtel = get_object_or_404(TransactionAirtel, external_id=numero_transaction)
+
+
+            airtel_service = AirtelMoneyService()
+            result = airtel_service.check_payment_status(transaction_airtel.airtel_transaction_id)
             return Response({
-                'success': True,
-                'data': {
-                    'numero_transaction': numero_transaction,
-                    'statut': paiement.statut,
-                    'operateur': paiement.operateur,
-                    'montant': paiement.montant,
-                    'message': 'Vérification Airtel bientôt disponible'
-                }
+                'data': result
             })
         
         return Response({
