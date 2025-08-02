@@ -276,7 +276,7 @@ def initier_paiement_borne(request):
     return initier_paiement_flexible(request)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def verifier_statut_paiement_borne(request, numero_transaction):
     """
     Vérifie le statut d'un paiement depuis la borne (compatible tous opérateurs)
