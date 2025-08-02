@@ -276,7 +276,7 @@ def initier_paiement_borne(request):
     return initier_paiement_flexible(request)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def verifier_statut_paiement_borne(request, numero_transaction):
     """
     Vérifie le statut d'un paiement depuis la borne (compatible tous opérateurs)
@@ -354,7 +354,7 @@ def verifier_statut_paiement_borne(request, numero_transaction):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def nouvelle_souscription_avec_paiement(request):
     """
     Crée une nouvelle souscription PASS avec paiement flexible + agent connecté
